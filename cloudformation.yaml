@@ -1,0 +1,125 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: CloudFormation template for API Gateway, FIFO SQS, Lambda, and Secrets Manager integration.
+
+Parameters:
+  RegionName:
+    Type: String
+    Description: The AWS region where the resources will be deployed.
+    Default: us-west-2
+
+  InferenceProfileId:
+    Type: String
+    Description: The inference profile ID for the Lambda function.
+
+Resources:
+  MyApiGateway:
+    Type: AWS::ApiGateway::RestApi
+    Properties:
+      Name: MyRestApi
+      Description: API Gateway to receive REST requests
+
+  MyApiResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref MyApiGateway
+      ParentId: !GetAtt MyApiGateway.RootResourceId
+      PathPart: "message"
+
+  MyApiMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref MyApiGateway
+      ResourceId: !Ref MyApiResource
+      HttpMethod: POST
+      AuthorizationType: NONE
+      Integration:
+        Type: AWS
+        IntegrationHttpMethod: POST
+        Uri: !Sub
+          - "arn:aws:apigateway:${AWS::Region}:sqs:path/${AWS::AccountId}/${QueueName}"
+          - QueueName: !Ref MySQSQueue
+        Credentials: !GetAtt MyApiGatewayRole.Arn
+        PassthroughBehavior: WHEN_NO_MATCH
+        RequestParameters:
+          integration.request.header.Content-Type: "'application/x-www-form-urlencoded'"
+        RequestTemplates:
+          application/json: "Action=SendMessage&MessageBody=$input.body"
+        IntegrationResponses:
+          - StatusCode: 200
+
+  MyApiGatewayRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - apigateway.amazonaws.com
+            Action:
+              - "sts:AssumeRole"
+      Policies:
+        - PolicyName: AllowSQSSendMessage
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: "sqs:SendMessage"
+                Resource: !GetAtt MySQSQueue.Arn
+
+  MySQSQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: MyQueue.fifo
+      FifoQueue: true
+      ContentBasedDeduplication: true
+
+  MyLambdaFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: MyLambdaFunction
+      Handler: lambda_function.lambda_handler
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Code:
+        Repository: "https://github.com/yourusername/your-repo.git"
+        Revision: "main"
+      Runtime: python3.8
+      Environment:
+        Variables:
+          REGION_NAME: !Ref RegionName
+          INFERENCE_PROFILE_ID: !Ref InferenceProfileId
+          SECRETS_MANAGER_ARN: !Ref MySecretsManagerSecret
+
+  LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - "sts:AssumeRole"
+      Policies:
+        - PolicyName: AllowSecretsManagerAccess
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: "secretsmanager:GetSecretValue"
+                Resource: !Ref MySecretsManagerSecret
+
+  MySecretsManagerSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: MySecret
+      Description: "Contains AWS_ACCESS_KEY and AWS_SECRET_KEY"
+      SecretString: '{"AWS_ACCESS_KEY":"your-access-key","AWS_SECRET_KEY":"your-secret-key"}'
+
+Outputs:
+  ApiGatewayInvokeURL:
+    Description: "URL to invoke the API Gateway"
+    Value: !Sub "https://${MyApiGateway}.execute-api.${AWS::Region}.amazonaws.com/prod/message"
