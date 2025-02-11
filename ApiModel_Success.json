@@ -1,0 +1,14 @@
+{
+  "$schema": "http://json-schema.org/draft-04/schema#",
+  "title": "Sample Response",
+  "type": "object",
+  "required": ["body"],
+  "properties": {
+    "statusCode": {
+      "type": "integer"
+    },
+    "body": {
+      "type": "string"
+    }
+  }
+}

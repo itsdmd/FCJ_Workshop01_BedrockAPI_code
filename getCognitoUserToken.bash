@@ -1,0 +1,1 @@
+aws cognito-idp initiate-auth --auth-flow USER_PASSWORD_AUTH --region us-east-1 --client-id 2gc6rar1u41i8i1bbk1vgpc2fn --auth-parameters USERNAME=testUser,PASSWORD=T3$tUser

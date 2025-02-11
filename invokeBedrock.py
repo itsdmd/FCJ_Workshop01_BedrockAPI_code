@@ -3,9 +3,9 @@ import boto3
 import os
 import re
 
-
 REGION_NAME = os.environ["REGION_NAME"]
 INFERENCE_PROFILE_ID = os.environ["INFERENCE_PROFILE_ID"]
+SECRET_NAME = os.environ["SECRET_NAME"]
 
 
 def bedrock_call(inputText, sessionId):
@@ -30,7 +30,7 @@ def bedrock_call(inputText, sessionId):
                 decoded_binary_secret = base64.b64decode(response["SecretBinary"])
                 return decoded_binary_secret
 
-    secret = get_secret("awsKeys")
+    secret = get_secret(SECRET_NAME)
 
     bedrock_runtime = boto3.client(
         service_name="bedrock-runtime",

@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: "2010-09-09"
-Description: CloudFormation template for API Gateway, Lambda, and Secrets Manager integration.
+Description: CloudFormation template for Cognito, API Gateway, Lambda, and Secrets Manager integration.
 
 Parameters:
   RegionName:
@@ -15,7 +15,7 @@ Parameters:
   S3Bucket:
     Type: String
     Description: The S3 bucket where the Lambda function code will be stored.
-    Default: fcj-workshop01-bedrockapi
+    Default: fcj-workshop-bedrockapi
 
   SecretName:
     Type: String
@@ -36,77 +36,33 @@ Resources:
       ParentId: !GetAtt BedrockApiWsApiGateway.RootResourceId
       PathPart: "message"
 
-  BedrockApiWsCognitoUserPool:
-    Type: AWS::Cognito::UserPool
-    Properties:
-      UserPoolName: BedrockApiWsUserPool
-      AutoVerifiedAttributes:
-        - email
-
-  BedrockApiWsCognitoAuthorizer:
-    Type: AWS::ApiGateway::Authorizer
-    Properties:
-      Name: CognitoAuthorizer
-      Type: COGNITO_USER_POOLS
-      IdentitySource: method.request.header.Authorization
-      RestApiId: !Ref BedrockApiWsApiGateway
-      ProviderARNs:
-        - !GetAtt BedrockApiWsCognitoUserPool.Arn
-
-  BedrockApiWsDefaultRequestModel:
-    Type: AWS::ApiGateway::Model
-    Properties:
-      RestApiId: !Ref BedrockApiWsApiGateway
-      ContentType: "application/json"
-      Name: "DefaultRequest"
-      Schema:
-        $schema: "http://json-schema.org/draft-04/schema#"
-        title: "DefaultRequest"
-        type: "object"
-        required: ["body"]
-        properties:
-          body:
-            type: "string"
-
-  BedrockApiWsSuccessModel:
-    Type: AWS::ApiGateway::Model
-    Properties:
-      RestApiId: !Ref BedrockApiWsApiGateway
-      ContentType: "application/json"
-      Name: "SuccessResponse"
-      Schema:
-        $schema: "http://json-schema.org/draft-04/schema#"
-        title: "SuccessResponse"
-        type: "object"
-        required: ["body"]
-        properties:
-          statusCode:
-            type: "integer"
-          body:
-            type: "string"
-
   BedrockApiWsApiMethod:
     Type: AWS::ApiGateway::Method
     Properties:
       RestApiId: !Ref BedrockApiWsApiGateway
       ResourceId: !Ref BedrockApiWsApiResource
       HttpMethod: POST
-      AuthorizationType: COGNITO_USER_POOLS
-      AuthorizerId: !Ref BedrockApiWsCognitoAuthorizer
-      RequestModels:
-        application/json: !Ref BedrockApiWsDefaultRequestModel
-      MethodResponses:
-        - StatusCode: 200
-          ResponseModels:
-            application/json: !Ref BedrockApiWsSuccessModel
+      AuthorizationType: NONE
       Integration:
         Type: AWS_PROXY
         IntegrationHttpMethod: POST
         Uri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${BedrockApiWsLambdaFunction.Arn}/invocations"
-        IntegrationResponses:
-          - StatusCode: 200
-            ResponseTemplates:
-              application/json: ""
+      MethodResponses:
+        - StatusCode: 200
+
+  BedrockApiWsApiDeployment:
+    Type: AWS::ApiGateway::Deployment
+    Properties:
+      RestApiId: !Ref BedrockApiWsApiGateway
+      Description: "Automatic deployment for test environment"
+    DependsOn: BedrockApiWsApiMethod
+
+  BedrockApiWsApiStage:
+    Type: AWS::ApiGateway::Stage
+    Properties:
+      StageName: "test"
+      RestApiId: !Ref BedrockApiWsApiGateway
+      DeploymentId: !Ref BedrockApiWsApiDeployment
 
   BedrockApiWsApiGatewayRole:
     Type: AWS::IAM::Role
@@ -185,7 +141,12 @@ Resources:
 Outputs:
   ApiGatewayInvokeURL:
     Description: "URL to invoke the API Gateway"
-    Value: !Sub "https://${BedrockApiWsApiGateway}.execute-api.${AWS::Region}.amazonaws.com/prod/message"
+    Value: !Sub "https://${BedrockApiWsApiGateway}.execute-api.${AWS::Region}.amazonaws.com/test/message"
+
+  ApiGatewayConsoleURL:
+    Description: "URL to the API Gateway Resources page in the AWS Management Console"
+    Value: !Sub "https://${AWS::Region}.console.aws.amazon.com/apigateway/home?region=${AWS::Region}/apis/${BedrockApiWsApiGateway}/resources"
+
   CognitoUserPoolId:
     Description: "Cognito User Pool ID"
     Value: !Ref BedrockApiWsCognitoUserPool
